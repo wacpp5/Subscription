@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # ✅ new
 from subscription_logic import get_customer_subscriptions, update_subscription
-import os
-import logging
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.DEBUG)
+CORS(app, origins=["https://www.teadog.com"])  # ✅ only allow your Shopify domain
 
 @app.route('/subscriptions', methods=['GET'])
 def get_subscriptions():
@@ -12,22 +11,14 @@ def get_subscriptions():
     if not customer_id:
         return jsonify({'error': 'Missing customer_id'}), 400
 
-    try:
-        subscriptions = get_customer_subscriptions(customer_id)
-        return jsonify(subscriptions)
-    except Exception as e:
-        logging.exception("Error in /subscriptions")
-        return jsonify({'error': 'Internal Server Error', 'details': str(e)}), 500
+    subscriptions = get_customer_subscriptions(customer_id)
+    return jsonify(subscriptions)
 
 @app.route('/subscriptions/update', methods=['POST'])
 def update_sub():
-    try:
-        data = request.json
-        result = update_subscription(data)
-        return jsonify(result)
-    except Exception as e:
-        logging.exception("Error in /subscriptions/update")
-        return jsonify({'error': 'Internal Server Error', 'details': str(e)}), 500
+    data = request.json
+    result = update_subscription(data)
+    return jsonify(result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
