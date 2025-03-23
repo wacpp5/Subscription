@@ -1,31 +1,55 @@
 from shopify_api import shopify_graphql_request
 
 def get_customer_subscriptions(customer_id):
-    query = """
-    query GetSubscriptions($customerId: ID!) {
-      subscriptionContracts(first: 10, customerId: $customerId) {
-        edges {
-          node {
-            id
-            status
-            nextBillingDate
-            lines(first: 5) {
-              edges {
-                node {
-                  title
-                  quantity
+    all_matches = []
+    has_next_page = True
+    after_cursor = None
+
+    while has_next_page:
+        query = """
+        query GetSubscriptions($after: String) {
+          subscriptionContracts(first: 50, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            edges {
+              node {
+                id
+                status
+                nextBillingDate
+                customer {
+                  id
+                  email
+                }
+                lines(first: 5) {
+                  edges {
+                    node {
+                      title
+                      quantity
+                    }
+                  }
                 }
               }
             }
           }
         }
-      }
-    }
-    """
-    variables = {
-        "customerId": f"gid://shopify/Customer/{customer_id}"
-    }
-    return shopify_graphql_request(query, variables)
+        """
+
+        variables = {"after": after_cursor} if after_cursor else {}
+        response = shopify_graphql_request(query, variables)
+
+        contracts = response["data"]["subscriptionContracts"]
+        for edge in contracts["edges"]:
+            contract = edge["node"]
+            contract_customer_id = contract["customer"]["id"].split("/")[-1]
+            if contract_customer_id == str(customer_id):
+                all_matches.append(contract)
+
+        has_next_page = contracts["pageInfo"]["hasNextPage"]
+        after_cursor = contracts["pageInfo"]["endCursor"]
+
+    return all_matches
 
 
 def update_subscription(data):
