@@ -1,4 +1,5 @@
 from shopify_api import shopify_graphql_request
+import logging
 
 def get_customer_subscriptions(customer_id):
     all_matches = []
@@ -37,17 +38,31 @@ def get_customer_subscriptions(customer_id):
         """
 
         variables = {"after": after_cursor} if after_cursor else {}
-        response = shopify_graphql_request(query, variables)
 
-        contracts = response["data"]["subscriptionContracts"]
-        for edge in contracts["edges"]:
-            contract = edge["node"]
-            contract_customer_id = contract["customer"]["id"].split("/")[-1]
-            if contract_customer_id == str(customer_id):
-                all_matches.append(contract)
+        try:
+            response = shopify_graphql_request(query, variables)
+            logging.debug(f"Shopify response: {response}")
 
-        has_next_page = contracts["pageInfo"]["hasNextPage"]
-        after_cursor = contracts["pageInfo"]["endCursor"]
+            contracts = response.get("data", {}).get("subscriptionContracts", {})
+            if not contracts:
+                logging.warning("No subscriptionContracts returned")
+                break
+
+            for edge in contracts.get("edges", []):
+                try:
+                    contract = edge["node"]
+                    contract_customer_id = contract["customer"]["id"].split("/")[-1]
+                    if contract_customer_id == str(customer_id):
+                        all_matches.append(contract)
+                except Exception as e:
+                    logging.warning(f"Error parsing contract: {e}")
+
+            has_next_page = contracts.get("pageInfo", {}).get("hasNextPage", False)
+            after_cursor = contracts.get("pageInfo", {}).get("endCursor")
+
+        except Exception as e:
+            logging.exception("Error during Shopify subscription query")
+            break
 
     return all_matches
 
@@ -101,6 +116,10 @@ def update_subscription(data):
     else:
         return {"error": "Unsupported action"}, 400
 
-    variables = {"id": subscription_id}
-    result = shopify_graphql_request(query, variables)
-    return result
+    try:
+        variables = {"id": subscription_id}
+        result = shopify_graphql_request(query, variables)
+        return result
+    except Exception as e:
+        logging.exception("Error updating subscription")
+        return {"error": "Internal Server Error", "details": str(e)}, 500
